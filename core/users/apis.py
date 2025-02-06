@@ -6,11 +6,11 @@ from drf_spectacular.utils import extend_schema
 from django.core.validators import MinLengthValidator
 
 from core.api.pagination import LimitOffsetPagination
-from core.users.services.products import register
-from core.users.selectore.products import get_profile
+from core.users.services import register
+from core.users.selectore import get_profile
 from core.users.models import BaseUser, Profile
 from core.users.validator import number_validator, letter_validator, special_char_validator
-from core.apis.mixins import ApiAuthMixin
+from core.api.mixins import ApiAuthMixin
 
 
 class RegisterApi(APIView):
@@ -31,17 +31,18 @@ class RegisterApi(APIView):
 		def validate_email(self, email):
 			if BaseUser.objects.filter(email=email).exists():
 				raise serializers.ValidationError('email already taken')
+			return email
 		
 		def validate(self, data):
 			if not data.get('password') or not data.get('confirm_password'):
 				raise serializers.ValidationError('Please enter password and confirm password')
 			if data.get('password') != data.get('confirm_password'):
 				raise serializers.ValidationError('password and confirm password not match')
-	
+			return data
 	class OutputRegisterSerializer(serializers.ModelSerializer):
 		class Meta:
 			model = BaseUser
-			fields = ('email')
+			fields = ('email',)
 	
 	@extend_schema(request=InputRegisterSerializer, responses=OutputRegisterSerializer)
 	def post(self, request):
@@ -63,10 +64,10 @@ class ProfileApi(ApiAuthMixin, APIView):
 	class OutputProfileSerializer(serializers.ModelSerializer):
 		class Meta:
 			model = Profile
-			fields = ('bio', 'post_count', 'subscriber_count', 'subscription_count')
+			fields = '__all__'
 	
 	@extend_schema(responses=OutputProfileSerializer)
 	def get(self, request):
 		query = get_profile(user=request.user)
-		return Response(self.OutputProfileSerializer(query, many=True, context={"request": request}).data,
+		return Response(self.OutputProfileSerializer(query, context={"request": request}).data,
 		                status=status.HTTP_200_OK)
