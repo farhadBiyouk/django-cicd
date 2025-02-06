@@ -6,9 +6,11 @@ from drf_spectacular.utils import extend_schema
 from django.core.validators import MinLengthValidator
 
 from core.api.pagination import LimitOffsetPagination
-from core.users.services.products import create_user
-from core.users.models import BaseUser
+from core.users.services.products import register
+from core.users.selectore.products import get_profile
+from core.users.models import BaseUser, Profile
 from core.users.validator import number_validator, letter_validator, special_char_validator
+from core.apis.mixins import ApiAuthMixin
 
 
 class RegisterApi(APIView):
@@ -17,6 +19,7 @@ class RegisterApi(APIView):
 	
 	class InputRegisterSerializer(serializers.Serializer):
 		email = serializers.EmailField(max_length=255)
+		bio = serializers.CharField(max_length=255)
 		password = serializers.CharField(validators=[
 			MinLengthValidator(limit_value=10),
 			number_validator,
@@ -24,19 +27,46 @@ class RegisterApi(APIView):
 			special_char_validator
 		])
 		confirm_password = serializers.CharField(max_length=255)
+		
+		def validate_email(self, email):
+			if BaseUser.objects.filter(email=email).exists():
+				raise serializers.ValidationError('email already taken')
+		
+		def validate(self, data):
+			if not data.get('password') or not data.get('confirm_password'):
+				raise serializers.ValidationError('Please enter password and confirm password')
+			if data.get('password') != data.get('confirm_password'):
+				raise serializers.ValidationError('password and confirm password not match')
 	
 	class OutputRegisterSerializer(serializers.ModelSerializer):
 		class Meta:
 			model = BaseUser
-			fields = ('name', 'created_at', 'updated_at')
+			fields = ('email')
 	
 	@extend_schema(request=InputRegisterSerializer, responses=OutputRegisterSerializer)
 	def post(self, request):
 		ser = self.InputRegisterSerializer(data=request.data)
 		ser.is_valid(raise_exception=True)
 		try:
-			query = create_user(name=ser.validated_data.get('name'))
+			query = register(
+				email=ser.validated_data.get('email'),
+				password=ser.validated_data.get('password'),
+				bio=ser.validated_data.get('bio')
+			)
 		except Exception as ex:
 			return Response(f'Database error {ex}', status=status.HTTP_400_BAD_REQUEST)
 		return Response(self.OutputRegisterSerializer(query, context={"request": request}).data,
 		                status=status.HTTP_201_CREATED)
+
+
+class ProfileApi(ApiAuthMixin, APIView):
+	class OutputProfileSerializer(serializers.ModelSerializer):
+		class Meta:
+			model = Profile
+			fields = ('bio', 'post_count', 'subscriber_count', 'subscription_count')
+	
+	@extend_schema(responses=OutputProfileSerializer)
+	def get(self, request):
+		query = get_profile()
+		return Response(self.OutputProfileSerializer(query, many=True, context={"request": request}).data,
+		                status=status.HTTP_200_OK)
