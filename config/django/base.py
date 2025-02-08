@@ -15,9 +15,9 @@ ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 LOCAL_APPS = [
 	'core.core.apps.CoreConfig',
 	'core.common.apps.CommonConfig',
-	'core.authentication.apps.AuthenticationConfig',
 	'core.blog.apps.BlogConfig',
 	'core.users.apps.UsersConfig',
+	'core.authentication.apps.AuthenticationConfig',
 ]
 
 THIRD_PARTY_APPS = [

@@ -65,6 +65,7 @@ class ProfileApi(ApiAuthMixin, APIView):
 		class Meta:
 			model = Profile
 			fields = '__all__'
+			
 	
 	@extend_schema(responses=OutputProfileSerializer)
 	def get(self, request):
