@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
 from django.core.validators import MinLengthValidator
+from rest_framework_simplejwt.serializers import RefreshToken
 
 from core.api.pagination import LimitOffsetPagination
 from core.users.services import register
@@ -39,10 +40,22 @@ class RegisterApi(APIView):
 			if data.get('password') != data.get('confirm_password'):
 				raise serializers.ValidationError('password and confirm password not match')
 			return data
+	
 	class OutputRegisterSerializer(serializers.ModelSerializer):
+		token = serializers.SerializerMethodField('get_token')
+		
 		class Meta:
 			model = BaseUser
-			fields = ('email',)
+			fields = ('email', 'token', 'created_at', 'updated_at')
+		
+		def get_token(self, user):
+			data = dict()
+			token_class = RefreshToken
+			
+			refresh = token_class.for_user(user)
+			data['refresh'] = str(refresh)
+			data['access'] = str(refresh.access_token)
+			return data
 	
 	@extend_schema(request=InputRegisterSerializer, responses=OutputRegisterSerializer)
 	def post(self, request):
@@ -65,7 +78,6 @@ class ProfileApi(ApiAuthMixin, APIView):
 		class Meta:
 			model = Profile
 			fields = '__all__'
-			
 	
 	@extend_schema(responses=OutputProfileSerializer)
 	def get(self, request):
