@@ -18,6 +18,7 @@ LOCAL_APPS = [
 	'core.blog.apps.BlogConfig',
 	'core.users.apps.UsersConfig',
 	'core.authentication.apps.AuthenticationConfig',
+	'core.tasks.apps.TasksConfig',
 ]
 
 THIRD_PARTY_APPS = [
