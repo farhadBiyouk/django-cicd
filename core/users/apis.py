@@ -3,8 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema
-from django.core.validators import MinLengthValidator
 from rest_framework_simplejwt.serializers import RefreshToken
+
+from django.core.validators import MinLengthValidator
+from django.core.cache import cache
 
 from core.api.pagination import LimitOffsetPagination
 from core.users.services import register
@@ -84,7 +86,19 @@ class ProfileApi(ApiAuthMixin, APIView):
 				"subscription_count",
 				"bio",
 			)
-	
+		def to_representation(self, instance):
+			rep = super().to_representation(instance)
+			
+			profile_key = cache.get(f'profile_{instance.user}', {})
+			print(profile_key)
+			if profile_key:
+				rep['post_count'] = profile_key.get('posts_count')
+				rep['subscriber_count'] = profile_key.get('subscribers_count')
+				rep['subscription_count'] = profile_key.get('subscriptions_count')
+			
+			return rep
+		
+		
 	@extend_schema(responses=OutputProfileSerializer)
 	def get(self, request):
 		query = get_profile(user=request.user)
