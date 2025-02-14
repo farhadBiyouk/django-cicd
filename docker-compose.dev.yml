@@ -13,6 +13,8 @@ services:
       - POSTGRES_PASSWORD=postgres
     volumes:
       - postgres-data:/var/lib/postgresql/data/
+    networks:
+      - 'main'
 
   pgadmin:
     container_name: pgadmin4_container
@@ -23,6 +25,8 @@ services:
       PGADMIN_DEFAULT_PASSWORD: 'pg_pass'
     ports:
       - "5050:80"
+    networks:
+      - 'main'
 
   rabbitmq:
     image: "rabbitmq:alpine"
@@ -32,7 +36,8 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-
+    networks:
+      - 'main'
   redis:
     image: redis:latest
     container_name: redis
@@ -41,8 +46,11 @@ services:
     volumes:
       - redis-data:/data
 
-
+    networks:
+      - 'main'
 volumes:
     postgres-data:
     redis-data:
 
+networks:
+  main:
