@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.conf import settings
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import serializers, status
 from rest_framework.decorators import action
@@ -6,11 +6,12 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from core.news.models import Story
+from core.news.es_helper import ESHelper
 
 
 class StorySerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.SerializerMethodField()
+    doc_id = serializers.SerializerMethodField()
     title = serializers.CharField(read_only=True, allow_null=True)
     title_last_generated_at = serializers.DateTimeField(read_only=True, allow_null=True)
     description = serializers.CharField(read_only=True, allow_null=True)
@@ -25,10 +26,27 @@ class StorySerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField(read_only=True)
     last_event_added_at = serializers.DateTimeField(read_only=True, allow_null=True)
     image_url = serializers.CharField(read_only=True, allow_null=True)
+    is_trend = serializers.SerializerMethodField()
+
+    def get_id(self, obj):
+        return obj.get("id") or obj.get("doc_id") or obj.get("_id")
+
+    def get_doc_id(self, obj):
+        return obj.get("doc_id") or obj.get("_id")
+
+    def get_is_trend(self, obj):
+        trend_value = obj.get("is_trend")
+        if isinstance(trend_value, bool):
+            return trend_value
+        try:
+            return int(obj.get("event_count") or 0) > 0
+        except (TypeError, ValueError):
+            return False
 
 
 class StoryListSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
+    id = serializers.SerializerMethodField()
+    doc_id = serializers.SerializerMethodField()
     title = serializers.CharField(read_only=True, allow_null=True)
     short_summary = serializers.CharField(read_only=True)
     event_count = serializers.IntegerField(read_only=True)
@@ -37,9 +55,20 @@ class StoryListSerializer(serializers.Serializer):
     image_url = serializers.CharField(read_only=True, allow_null=True)
     is_trend = serializers.SerializerMethodField()
 
+    def get_id(self, obj):
+        return obj.get("id") or obj.get("doc_id") or obj.get("_id")
+
+    def get_doc_id(self, obj):
+        return obj.get("doc_id") or obj.get("_id")
+
     def get_is_trend(self, obj):
-        # A story is treated as trending when it has at least one event.
-        return (obj.event_count or 0) > 0
+        trend_value = obj.get("is_trend")
+        if isinstance(trend_value, bool):
+            return trend_value
+        try:
+            return int(obj.get("event_count") or 0) > 0
+        except (TypeError, ValueError):
+            return False
 
 
 @extend_schema_view(
@@ -59,7 +88,19 @@ class StoryListSerializer(serializers.Serializer):
 class StoryViewSet(GenericViewSet):
     serializer_class = StorySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
-    queryset = Story.objects.all()
+    lookup_field = "doc_id"
+    queryset = []
+
+    STORY_SORT_MAP = {
+        "created_at": {"field": "created_at", "unmapped_type": "date"},
+        "event_count": {"field": "event_count", "unmapped_type": "long"},
+        "title": {"field": "title.keyword", "unmapped_type": "keyword"},
+    }
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        index_name = getattr(settings, "INDEX_STORY_NAME", "story")
+        self.es_helper = ESHelper(index_name)
 
     def get_serializer_class(self):
         if self.action == "search":
@@ -90,7 +131,7 @@ class StoryViewSet(GenericViewSet):
         raise ValueError("is_trend must be a boolean (true/false)")
 
     def retrieve(self, request, story_id=None):
-        story = Story.objects.filter(id=story_id).first()
+        story = self.es_helper.get(story_id)
         if not story:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(instance=story)
@@ -104,7 +145,7 @@ class StoryViewSet(GenericViewSet):
             OpenApiParameter("page_size", description="تعداد رکورد", required=False, type=int, default=20),
             OpenApiParameter(
                 "is_trend",
-                description="فیلتر روندی بودن (براساس event_count > 0)",
+                description="فیلتر روندی بودن",
                 required=False,
                 type=bool,
             ),
@@ -135,16 +176,8 @@ class StoryViewSet(GenericViewSet):
         event_id = request.query_params.get("event_id")
         is_trend = request.query_params.get("is_trend")
 
-        queryset = Story.objects.all()
-
-        if query:
-            queryset = queryset.filter(
-                Q(title__icontains=query)
-                | Q(description__icontains=query)
-                | Q(short_summary__icontains=query)
-                | Q(detailed_summary__icontains=query)
-            )
-
+        filters = {}
+        extra_filter_clauses = []
         if event_id not in (None, ""):
             try:
                 event_id_int = int(event_id)
@@ -153,7 +186,7 @@ class StoryViewSet(GenericViewSet):
                     {"detail": "event_id must be an integer"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            queryset = queryset.filter(story_events__event_id=event_id_int)
+            filters["event_id"] = event_id_int
 
         if is_trend not in (None, ""):
             try:
@@ -161,25 +194,30 @@ class StoryViewSet(GenericViewSet):
             except ValueError as exc:
                 return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             if is_trend_bool:
-                queryset = queryset.filter(event_count__gt=0)
+                extra_filter_clauses.append({"range": {"event_count": {"gt": 0}}})
             else:
-                queryset = queryset.filter(event_count=0)
+                extra_filter_clauses.append({"term": {"event_count": 0}})
 
-        queryset = queryset.distinct()
+        raw_hits, total = self.es_helper.search(
+            query=query,
+            page=page,
+            page_size=page_size,
+            sort_field=sort_field,
+            sort_order=sort_order,
+            filters=filters or None,
+            sort_map=self.STORY_SORT_MAP,
+            default_sort_field="created_at",
+            search_fields=["title", "description", "short_summary", "detailed_summary"],
+            extra_filter_clauses=extra_filter_clauses,
+        )
 
-        allowed_sort_fields = {"created_at", "event_count"}
-        if sort_field not in allowed_sort_fields:
-            sort_field = "created_at"
-        if sort_order not in {"asc", "desc"}:
-            sort_order = "desc"
-
-        order_expression = sort_field if sort_order == "asc" else f"-{sort_field}"
-        queryset = queryset.order_by(order_expression, "-id")
-
-        total = queryset.count()
-        start = (page - 1) * page_size
-        end = start + page_size
-        stories = queryset[start:end]
+        stories = []
+        for hit in raw_hits:
+            doc = hit.get("_source", {})
+            doc["_id"] = hit.get("_id")
+            if "doc_id" not in doc:
+                doc["doc_id"] = hit.get("_id")
+            stories.append(doc)
 
         serializer = self.get_serializer(stories, many=True)
         return Response({"total": total, "results": serializer.data})
