@@ -94,7 +94,7 @@ class EventCategoryAdmin(admin.ModelAdmin):
 class EventReportAdmin(admin.ModelAdmin):
     list_display = ("id", "event", "reported_by", "created_at")
     search_fields = ("reason",)
-    raw_id_fields = ("event", "reported_by")
+    list_filter = ("event", "reported_by")
 
 
 @admin.register(Story)

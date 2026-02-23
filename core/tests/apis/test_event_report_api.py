@@ -53,7 +53,8 @@ def test_event_report_create_success(api_client):
     assert response.status_code == 201
     assert data["event_id"] == event.id
     assert data["reason"] == "Contains misinformation"
-    assert EventReport.objects.filter(event_id=event.id).count() == 1
+    assert "reported_by_id" in data
+    assert EventReport.objects.filter(event=event.id).count() == 1
 
 
 @pytest.mark.django_db
@@ -68,3 +69,32 @@ def test_event_report_create_invalid_event(api_client):
 
     assert response.status_code == 400
     assert "event_id" in response.json()
+
+
+@pytest.mark.django_db
+def test_event_report_list_success(api_client):
+    event1 = create_event()
+    event2 = create_event()
+    url_ = reverse("api:news:event_report")
+
+    create_resp_1 = api_client.post(
+        url_,
+        data={"event_id": event1.id, "reason": "First report"},
+        format="json",
+    )
+    create_resp_2 = api_client.post(
+        url_,
+        data={"event_id": event2.id, "reason": "Second report"},
+        format="json",
+    )
+
+    assert create_resp_1.status_code == 201
+    assert create_resp_2.status_code == 201
+
+    response = api_client.get(url_, {"event_id": event1.id}, format="json")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["total"] == 1
+    assert len(data["results"]) == 1
+    assert data["results"][0]["event_id"] == event1.id
