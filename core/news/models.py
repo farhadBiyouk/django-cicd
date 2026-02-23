@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
@@ -584,6 +585,33 @@ class ServiceControl(models.Model):
 
     def __str__(self) -> str:
         return f"ServiceControl {self.pk}"
+
+
+class EventReport(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name="reports",
+    )
+    reason = models.TextField()
+    reported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="event_reports",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "event_report"
+        indexes = [
+            models.Index(fields=["event", "created_at"]),
+            models.Index(fields=["reported_by"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Report #{self.pk} for event {self.event_id}"
 
 
 class CrawlResult(models.Model):

@@ -4,4 +4,5 @@ urlpatterns = [
     path('blog/', include(('core.blog.urls', 'blog'))),
     path('users/', include(('core.users.urls', 'users'))),
     path('auth/', include(('core.authentication.urls', 'auth'))),
+    path('news/', include(('core.news.urls', 'news'))),
 ]
