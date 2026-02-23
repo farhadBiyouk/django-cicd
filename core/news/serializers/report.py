@@ -1,16 +1,8 @@
 from rest_framework import serializers
 
-from core.news.models import Event
-
-
 class EventReportCreateSerializer(serializers.Serializer):
     event_id = serializers.IntegerField(min_value=1)
     reason = serializers.CharField(max_length=2000)
-
-    def validate_event_id(self, event_id):
-        if not Event.objects.filter(id=event_id).exists():
-            raise serializers.ValidationError("event with this id does not exist")
-        return event_id
 
     def validate_reason(self, reason):
         cleaned = reason.strip()
