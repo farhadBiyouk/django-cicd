@@ -2,6 +2,11 @@ from core.news.serializers.comment import (
     EventCommentCreateSerializer,
     EventCommentSerializer,
 )
+from core.news.serializers.follow import (
+    FollowListQuerySerializer,
+    FollowMutationSerializer,
+    FollowSerializer,
+)
 from core.news.serializers.report import (
     EventReportCreateSerializer,
     EventReportQuerySerializer,
@@ -17,6 +22,9 @@ from core.news.serializers.source import (
 __all__ = [
     "EventCommentCreateSerializer",
     "EventCommentSerializer",
+    "FollowListQuerySerializer",
+    "FollowMutationSerializer",
+    "FollowSerializer",
     "EventReportCreateSerializer",
     "EventReportQuerySerializer",
     "EventReportSerializer",

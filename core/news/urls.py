@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from core.news.apis.comment import EventCommentViewSet
+from core.news.apis.follow import FollowApi
 from core.news.apis.report import EventReportApi
 from core.news.apis.story import StoryViewSet
 from core.news.apis.source import EventTopPublishersApi, SourceListApi
@@ -15,6 +16,7 @@ router.register(
 
 app_name = "news"
 urlpatterns = [
+    path("follows/", FollowApi.as_view(), name="follow"),
     path("reports/", EventReportApi.as_view(), name="event_report"),
     path("sources/", SourceListApi.as_view(), name="source_list"),
     path("events/<int:event_id>/sources/", EventTopPublishersApi.as_view(), name="event_source_list"),

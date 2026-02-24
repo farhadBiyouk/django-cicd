@@ -635,6 +635,45 @@ class EventComment(models.Model):
         return f"Comment #{self.pk} for event {self.event_id}"
 
 
+class Follow(models.Model):
+    TARGET_EVENT = "event"
+    TARGET_STORY = "story"
+    TARGET_PERSON = "person"
+    TARGET_SOURCE = "source"
+    TARGET_ENTITY = "entity"
+
+    TARGET_TYPE_CHOICES = (
+        (TARGET_EVENT, "Event"),
+        (TARGET_STORY, "Story"),
+        (TARGET_PERSON, "Person"),
+        (TARGET_SOURCE, "Source"),
+        (TARGET_ENTITY, "Entity"),
+    )
+
+    id = models.BigAutoField(primary_key=True)
+    user_id = models.BigIntegerField(db_index=True)
+    target_type = models.CharField(max_length=20, choices=TARGET_TYPE_CHOICES, db_index=True)
+    target_id = models.CharField(max_length=128, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "follow"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user_id", "target_type", "target_id"],
+                name="follow_user_target_type_target_id_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["target_type", "target_id"]),
+            models.Index(fields=["user_id", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Follow #{self.pk} user={self.user_id} {self.target_type}:{self.target_id}"
+
+
 class CrawlResult(models.Model):
     id = models.AutoField(primary_key=True)
     url = models.TextField(unique=True)

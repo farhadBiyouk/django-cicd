@@ -13,6 +13,7 @@ from .models import (
     EventReport,
     EventStory,
     Feed,
+    Follow,
     ProcessLog,
     PropagandaTechnique,
     ServiceControl,
@@ -103,6 +104,13 @@ class EventCommentAdmin(admin.ModelAdmin):
     list_display = ("id", "event_id", "status", "author_id", "created_at")
     search_fields = ("event_id", "content")
     list_filter = ("status",)
+
+
+@admin.register(Follow)
+class FollowAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_id", "target_type", "target_id", "created_at")
+    search_fields = ("target_id",)
+    list_filter = ("target_type",)
 
 
 @admin.register(Story)
