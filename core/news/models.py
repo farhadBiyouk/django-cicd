@@ -17,7 +17,7 @@ class Source(models.Model):
     total_articles = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
-    logo = models.CharField(max_length=100, null=True, blank=True)
+    logo = models.ImageField(upload_to="source_logos/", null=True, blank=True)
     crawl_mode = models.CharField(max_length=10, null=True, blank=True)
 
     class Meta:

@@ -24,5 +24,25 @@ class SourceListSerializer(serializers.Serializer):
     total_articles = serializers.IntegerField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
-    logo = serializers.CharField(read_only=True, allow_null=True)
+    logo = serializers.SerializerMethodField()
     crawl_mode = serializers.CharField(read_only=True, allow_null=True)
+
+    def get_logo(self, obj):
+        logo_name = getattr(obj, "logo", None)
+        if not logo_name:
+            return None
+
+        # Preserve existing absolute URLs stored as plain strings.
+        raw_value = str(logo_name)
+        if raw_value.startswith("http://") or raw_value.startswith("https://"):
+            return raw_value
+
+        try:
+            url = obj.logo.url
+        except Exception:
+            return raw_value
+
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(url)
+        return url

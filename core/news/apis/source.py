@@ -53,5 +53,5 @@ class SourceListApi(APIView):
         end = start + page_size
         sources = queryset[start:end]
 
-        serializer = SourceListSerializer(sources, many=True)
+        serializer = SourceListSerializer(sources, many=True, context={"request": request})
         return Response({"total": total, "results": serializer.data}, status=status.HTTP_200_OK)
