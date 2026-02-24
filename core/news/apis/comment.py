@@ -10,7 +10,6 @@ from core.news.es_helper import ESHelper
 from core.news.models import EventComment
 from core.news.serializers import (
     EventCommentCreateSerializer,
-    EventCommentReplySerializer,
     EventCommentSerializer,
 )
 
@@ -19,7 +18,7 @@ from core.news.serializers import (
     list=extend_schema(
         tags=["Event comments"],
         summary="گرفتن لیست کامنت‌های یک رویداد",
-        description="لیست کامنت‌ها و ریپلای‌های یک رویداد",
+        description="لیست کامنت‌های یک رویداد",
         parameters=[
             OpenApiParameter("event_pk", type=str, location=OpenApiParameter.PATH),
         ],
@@ -50,8 +49,6 @@ class EventCommentViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, Generi
     def get_serializer_class(self):
         if self.action == "create":
             return EventCommentCreateSerializer
-        if self.action == "reply":
-            return EventCommentReplySerializer
         return EventCommentSerializer
 
     def get_queryset(self):
@@ -90,24 +87,13 @@ class EventCommentViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, Generi
     def _can_moderate(user):
         return bool(getattr(user, "is_admin", False) or getattr(user, "is_superuser", False))
 
-    def _build_tree(self, comments):
-        children_map = {}
-        roots = []
-        for comment in comments:
-            if comment.reply_to:
-                children_map.setdefault(comment.reply_to, []).append(comment)
-            else:
-                roots.append(comment)
-        return roots, children_map
-
     def _get_event_comment(self, event_pk, pk):
         return EventComment.objects.filter(id=pk, event_id=str(event_pk)).first()
 
     def list(self, request, *args, **kwargs):
         comments = list(self.get_queryset())
-        roots, children_map = self._build_tree(comments)
-        serializer = EventCommentSerializer(roots, many=True, context={"children_map": children_map})
-        return Response({"total": len(roots), "results": serializer.data}, status=status.HTTP_200_OK)
+        serializer = EventCommentSerializer(comments, many=True)
+        return Response({"total": len(comments), "results": serializer.data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         event_pk = str(self.kwargs.get("event_pk"))
@@ -125,36 +111,7 @@ class EventCommentViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, Generi
             content=serializer.validated_data["content"],
             author_id=request.user.id,
         )
-        response_serializer = EventCommentSerializer(comment, context={"children_map": {}})
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-
-    @extend_schema(
-        tags=["Event comments"],
-        summary="ثبت ریپلای برای کامنت",
-        description="ثبت یک ریپلای برای یک کامنت در یک رویداد",
-        parameters=[
-            OpenApiParameter("event_pk", type=str, location=OpenApiParameter.PATH),
-            OpenApiParameter("pk", type=int, location=OpenApiParameter.PATH),
-        ],
-        request=EventCommentReplySerializer,
-        responses=EventCommentSerializer,
-    )
-    @action(detail=True, methods=["post"])
-    def reply(self, request, event_pk=None, pk=None):
-        parent_comment = self._get_event_comment(event_pk, pk)
-        if not parent_comment:
-            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        reply_comment = EventComment.objects.create(
-            event_id=str(event_pk),
-            content=serializer.validated_data["content"],
-            author_id=request.user.id,
-            reply_to=parent_comment.id,
-        )
-        response_serializer = EventCommentSerializer(reply_comment, context={"children_map": {}})
+        response_serializer = EventCommentSerializer(comment)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
@@ -178,7 +135,7 @@ class EventCommentViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, Generi
 
         comment.status = EventComment.STATUS_APPROVED
         comment.save(update_fields=["status", "updated_at"])
-        serializer = EventCommentSerializer(comment, context={"children_map": {}})
+        serializer = EventCommentSerializer(comment)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -202,5 +159,5 @@ class EventCommentViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, Generi
 
         comment.status = EventComment.STATUS_REJECTED
         comment.save(update_fields=["status", "updated_at"])
-        serializer = EventCommentSerializer(comment, context={"children_map": {}})
+        serializer = EventCommentSerializer(comment)
         return Response(serializer.data, status=status.HTTP_200_OK)

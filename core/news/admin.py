@@ -100,7 +100,7 @@ class EventReportAdmin(admin.ModelAdmin):
 
 @admin.register(EventComment)
 class EventCommentAdmin(admin.ModelAdmin):
-    list_display = ("id", "event_id", "status", "author_id", "reply_to", "created_at")
+    list_display = ("id", "event_id", "status", "author_id", "created_at")
     search_fields = ("event_id", "content")
     list_filter = ("status",)
 

@@ -621,7 +621,6 @@ class EventComment(models.Model):
     content = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     author_id = models.BigIntegerField(db_index=True)
-    reply_to = models.BigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -629,7 +628,6 @@ class EventComment(models.Model):
         db_table = "event_comment"
         indexes = [
             models.Index(fields=["event_id", "created_at"]),
-            models.Index(fields=["reply_to", "created_at"]),
             models.Index(fields=["status"]),
         ]
 
