@@ -7,6 +7,10 @@ from core.news.serializers.report import (
     EventReportQuerySerializer,
     EventReportSerializer,
 )
+from core.news.serializers.source import (
+    SourceListQuerySerializer,
+    SourceListSerializer,
+)
 
 __all__ = [
     "EventCommentCreateSerializer",
@@ -14,4 +18,6 @@ __all__ = [
     "EventReportCreateSerializer",
     "EventReportQuerySerializer",
     "EventReportSerializer",
+    "SourceListQuerySerializer",
+    "SourceListSerializer",
 ]

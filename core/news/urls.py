@@ -4,6 +4,7 @@ from rest_framework.routers import SimpleRouter
 from core.news.apis.comment import EventCommentViewSet
 from core.news.apis.report import EventReportApi
 from core.news.apis.story import StoryViewSet
+from core.news.apis.source import SourceListApi
 
 router = SimpleRouter()
 router.register(
@@ -15,6 +16,7 @@ router.register(
 app_name = "news"
 urlpatterns = [
     path("reports/", EventReportApi.as_view(), name="event_report"),
+    path("sources/", SourceListApi.as_view(), name="source_list"),
     path("stories/search/", StoryViewSet.as_view({"get": "search"}), name="story_search"),
     path("stories/<str:story_id>/", StoryViewSet.as_view({"get": "retrieve"}), name="story_retrieve"),
 ] + router.urls
