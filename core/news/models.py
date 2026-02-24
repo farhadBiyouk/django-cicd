@@ -605,6 +605,38 @@ class EventReport(models.Model):
         return f"Report #{self.pk} for event {self.event}"
 
 
+class EventComment(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+    )
+
+    id = models.BigAutoField(primary_key=True)
+    event_id = models.CharField(max_length=128)
+    content = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    author_id = models.BigIntegerField(db_index=True)
+    reply_to = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "event_comment"
+        indexes = [
+            models.Index(fields=["event_id", "created_at"]),
+            models.Index(fields=["reply_to", "created_at"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Comment #{self.pk} for event {self.event_id}"
+
+
 class CrawlResult(models.Model):
     id = models.AutoField(primary_key=True)
     url = models.TextField(unique=True)

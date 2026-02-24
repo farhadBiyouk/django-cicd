@@ -9,6 +9,7 @@ from .models import (
     EntityMention,
     Event,
     EventCategory,
+    EventComment,
     EventReport,
     EventStory,
     Feed,
@@ -95,6 +96,13 @@ class EventReportAdmin(admin.ModelAdmin):
     list_display = ("id", "event", "reported_by", "created_at")
     search_fields = ("reason",)
     list_filter = ("event", "reported_by")
+
+
+@admin.register(EventComment)
+class EventCommentAdmin(admin.ModelAdmin):
+    list_display = ("id", "event_id", "status", "author_id", "reply_to", "created_at")
+    search_fields = ("event_id", "content")
+    list_filter = ("status",)
 
 
 @admin.register(Story)
