@@ -1,7 +1,7 @@
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from rest_framework import status
+from rest_framework import mixins, status
 from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework.viewsets import GenericViewSet
 
 from core.api.mixins import ApiAuthMixin
 from core.news.models import Entity, Event, Follow, Source, Story
@@ -13,7 +13,7 @@ from core.news.serializers import (
 
 
 @extend_schema_view(
-    get=extend_schema(
+    list=extend_schema(
         tags=["Follow data"],
         summary="لیست دنبال‌کرده‌ها",
         description="لیست مواردی که کاربر دنبال کرده است",
@@ -24,14 +24,14 @@ from core.news.serializers import (
         ],
         responses=FollowSerializer(many=True),
     ),
-    post=extend_schema(
+    create=extend_schema(
         tags=["Follow data"],
         summary="دنبال‌کردن موجودیت",
         description="دنبال‌کردن رویداد، پرونده، شخص، ناشر یا سایر موجودیت",
         request=FollowMutationSerializer,
         responses=FollowSerializer,
     ),
-    delete=extend_schema(
+    destroy=extend_schema(
         tags=["Follow data"],
         summary="لغو دنبال‌کردن",
         description="لغو دنبال‌کردن یک موجودیت",
@@ -39,7 +39,15 @@ from core.news.serializers import (
         responses={204: None},
     ),
 )
-class FollowApi(ApiAuthMixin, APIView):
+class FollowViewSet(ApiAuthMixin, mixins.ListModelMixin, mixins.CreateModelMixin, GenericViewSet):
+    serializer_class = FollowSerializer
+    queryset = Follow.objects.none()
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return FollowMutationSerializer
+        return FollowSerializer
+
     @staticmethod
     def _parse_target_id(target_id):
         try:
@@ -64,7 +72,7 @@ class FollowApi(ApiAuthMixin, APIView):
             return Entity.objects.filter(id=target_id_int).exists()
         return False
 
-    def get(self, request):
+    def list(self, request, *args, **kwargs):
         serializer = FollowListQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
 
@@ -84,8 +92,8 @@ class FollowApi(ApiAuthMixin, APIView):
         out_serializer = FollowSerializer(records, many=True)
         return Response({"total": total, "results": out_serializer.data}, status=status.HTTP_200_OK)
 
-    def post(self, request):
-        serializer = FollowMutationSerializer(data=request.data)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         target_type = serializer.validated_data["target_type"]
@@ -108,7 +116,7 @@ class FollowApi(ApiAuthMixin, APIView):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
-    def delete(self, request):
+    def destroy(self, request, *args, **kwargs):
         payload = request.data if request.data else request.query_params
         serializer = FollowMutationSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
