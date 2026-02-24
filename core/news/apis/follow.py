@@ -27,14 +27,17 @@ from core.news.serializers import (
     create=extend_schema(
         tags=["Follow data"],
         summary="دنبال‌کردن موجودیت",
-        description="دنبال‌کردن رویداد، پرونده، شخص، ناشر یا سایر موجودیت",
+        description=(
+            "دنبال‌کردن موجودیت با target_type یکی از مقادیر: "
+            "event, story, person, source, entity"
+        ),
         request=FollowMutationSerializer,
         responses=FollowSerializer,
     ),
     destroy=extend_schema(
         tags=["Follow data"],
         summary="لغو دنبال‌کردن",
-        description="لغو دنبال‌کردن یک موجودیت",
+        description="لغو دنبال‌کردن با دریافت target_type و target_id از body",
         request=FollowMutationSerializer,
         responses={204: None},
     ),
@@ -117,8 +120,7 @@ class FollowViewSet(ApiAuthMixin, mixins.ListModelMixin, mixins.CreateModelMixin
         )
 
     def destroy(self, request, *args, **kwargs):
-        payload = request.data if request.data else request.query_params
-        serializer = FollowMutationSerializer(data=payload)
+        serializer = FollowMutationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         deleted_count, _ = Follow.objects.filter(
