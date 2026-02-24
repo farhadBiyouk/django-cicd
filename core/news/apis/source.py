@@ -1,12 +1,17 @@
-from django.db.models import Q
+from django.db.models import Count, Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.news.models import Source
-from core.news.serializers.source import SourceListQuerySerializer, SourceListSerializer
+from core.news.models import Event, Source
+from core.news.serializers.source import (
+    EventSourceListQuerySerializer,
+    EventSourceListSerializer,
+    SourceListQuerySerializer,
+    SourceListSerializer,
+)
 
 
 class SourceListApi(APIView):
@@ -55,3 +60,51 @@ class SourceListApi(APIView):
 
         serializer = SourceListSerializer(sources, many=True, context={"request": request})
         return Response({"total": total, "results": serializer.data}, status=status.HTTP_200_OK)
+
+
+class EventTopPublishersApi(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    @extend_schema(
+        tags=["Source data"],
+        summary="ناشران یک رویداد بر اساس بیشترین انتشار",
+        description="لیست ناشران مربوط به یک رویداد با ترتیب نزولی تعداد خبر",
+        parameters=[
+            OpenApiParameter("event_id", description="شناسه رویداد", required=True, type=int, location=OpenApiParameter.PATH),
+            OpenApiParameter("page", description="شماره صفحه", required=False, type=int, default=1),
+            OpenApiParameter("page_size", description="تعداد رکورد", required=False, type=int, default=20),
+        ],
+        responses=EventSourceListSerializer(many=True),
+    )
+    def get(self, request, event_id):
+        query_serializer = EventSourceListQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+
+        if not Event.objects.filter(id=event_id).exists():
+            return Response({"detail": "event not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        page = query_serializer.validated_data["page"]
+        page_size = query_serializer.validated_data["page_size"]
+
+        queryset = (
+            Source.objects.filter(articles__event_id=event_id)
+            .annotate(
+                published_articles_count=Count(
+                    "articles",
+                    filter=Q(articles__event_id=event_id),
+                )
+            )
+            .filter(published_articles_count__gt=0)
+            .order_by("-published_articles_count", "-id")
+        )
+
+        total = queryset.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        sources = queryset[start:end]
+
+        serializer = EventSourceListSerializer(sources, many=True, context={"request": request})
+        return Response(
+            {"event_id": event_id, "total": total, "results": serializer.data},
+            status=status.HTTP_200_OK,
+        )

@@ -8,6 +8,8 @@ from core.news.serializers.report import (
     EventReportSerializer,
 )
 from core.news.serializers.source import (
+    EventSourceListQuerySerializer,
+    EventSourceListSerializer,
     SourceListQuerySerializer,
     SourceListSerializer,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "EventReportCreateSerializer",
     "EventReportQuerySerializer",
     "EventReportSerializer",
+    "EventSourceListQuerySerializer",
+    "EventSourceListSerializer",
     "SourceListQuerySerializer",
     "SourceListSerializer",
 ]
