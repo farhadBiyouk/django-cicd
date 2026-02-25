@@ -16,6 +16,7 @@ LOCAL_APPS = [
 	'core.core.apps.CoreConfig',
 	'core.common.apps.CommonConfig',
 	'core.blog.apps.BlogConfig',
+	'core.news.apps.NewsConfig',
 	'core.users.apps.UsersConfig',
 	'core.authentication.apps.AuthenticationConfig',
 ]
