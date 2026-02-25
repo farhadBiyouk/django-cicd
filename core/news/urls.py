@@ -24,6 +24,7 @@ urlpatterns = [
     path("reports/", EventReportApi.as_view(), name="event_report"),
     path("sources/", SourceListApi.as_view(), name="source_list"),
     path("events/<int:event_id>/sources/", EventTopPublishersApi.as_view(), name="event_source_list"),
+    path("story/<int:story_id>/", StoryViewSet.as_view({"get": "retrieve"}), name="story_detail"),
     path("stories/search/", StoryViewSet.as_view({"get": "search"}), name="story_search"),
-    path("stories/<str:story_id>/", StoryViewSet.as_view({"get": "retrieve"}), name="story_retrieve"),
+    path("stories/<int:story_id>/", StoryViewSet.as_view({"get": "retrieve"}), name="story_retrieve"),
 ] + router.urls

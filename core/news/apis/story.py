@@ -1,4 +1,7 @@
-from django.conf import settings
+from datetime import timedelta
+
+from django.db.models import Count, Q
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import serializers, status
 from rest_framework.decorators import action
@@ -6,69 +9,58 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from core.news.es_helper import ESHelper
+from core.news.models import Article, EntityMention, Event, Story
+
+
+class StoryPublisherSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
+class StoryLastSevenDaysSerializer(serializers.Serializer):
+    title = serializers.CharField(read_only=True, allow_null=True)
+    event_count = serializers.IntegerField(read_only=True)
+    publisher_count = serializers.IntegerField(read_only=True)
+    article_count = serializers.IntegerField(read_only=True)
+    trend_count = serializers.IntegerField(read_only=True)
+    summary = serializers.CharField(read_only=True, allow_null=True)
 
 
 class StorySerializer(serializers.Serializer):
-    id = serializers.SerializerMethodField()
-    doc_id = serializers.SerializerMethodField()
+    id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(read_only=True, allow_null=True)
-    title_last_generated_at = serializers.DateTimeField(read_only=True, allow_null=True)
-    description = serializers.CharField(read_only=True, allow_null=True)
-    description_last_generated_at = serializers.DateTimeField(read_only=True, allow_null=True)
-    short_summary = serializers.CharField(read_only=True)
-    detailed_summary = serializers.CharField(read_only=True)
-    status = serializers.IntegerField(read_only=True)
-    confidence_score = serializers.FloatField(read_only=True)
+    published_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_updated_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    categories = serializers.ListField(child=serializers.CharField(), read_only=True)
+    last_seven_days = StoryLastSevenDaysSerializer(read_only=True)
     event_count = serializers.IntegerField(read_only=True)
+    publisher_count = serializers.IntegerField(read_only=True)
     article_count = serializers.IntegerField(read_only=True)
-    created_at = serializers.DateTimeField(read_only=True)
-    updated_at = serializers.DateTimeField(read_only=True)
-    last_event_added_at = serializers.DateTimeField(read_only=True, allow_null=True)
-    image_url = serializers.CharField(read_only=True, allow_null=True)
-    is_trend = serializers.SerializerMethodField()
-
-    def get_id(self, obj):
-        return obj.get("id") or obj.get("doc_id") or obj.get("_id")
-
-    def get_doc_id(self, obj):
-        return obj.get("doc_id") or obj.get("_id")
-
-    def get_is_trend(self, obj):
-        trend_value = obj.get("is_trend")
-        if isinstance(trend_value, bool):
-            return trend_value
-        try:
-            return int(obj.get("event_count") or 0) > 0
-        except (TypeError, ValueError):
-            return False
+    trend_count = serializers.IntegerField(read_only=True)
+    conflict_count = serializers.IntegerField(read_only=True)
+    person_count = serializers.IntegerField(read_only=True)
+    entities_count = serializers.IntegerField(read_only=True)
+    save_count = serializers.IntegerField(read_only=True)
+    view_count = serializers.IntegerField(read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
+    like_count = serializers.IntegerField(read_only=True)
+    summary = serializers.CharField(read_only=True, allow_null=True)
+    publishers = StoryPublisherSerializer(many=True, read_only=True)
+    description = serializers.CharField(read_only=True, allow_null=True)
+    album_candidates = serializers.ListField(child=serializers.CharField(), read_only=True)
+    article_statistics = serializers.ListField(child=serializers.DictField(), read_only=True)
 
 
 class StoryListSerializer(serializers.Serializer):
-    id = serializers.SerializerMethodField()
-    doc_id = serializers.SerializerMethodField()
+    id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(read_only=True, allow_null=True)
-    short_summary = serializers.CharField(read_only=True)
+    published_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_updated_at = serializers.DateTimeField(read_only=True, allow_null=True)
     event_count = serializers.IntegerField(read_only=True)
+    publisher_count = serializers.IntegerField(read_only=True)
     article_count = serializers.IntegerField(read_only=True)
-    created_at = serializers.DateTimeField(read_only=True)
-    image_url = serializers.CharField(read_only=True, allow_null=True)
-    is_trend = serializers.SerializerMethodField()
-
-    def get_id(self, obj):
-        return obj.get("id") or obj.get("doc_id") or obj.get("_id")
-
-    def get_doc_id(self, obj):
-        return obj.get("doc_id") or obj.get("_id")
-
-    def get_is_trend(self, obj):
-        trend_value = obj.get("is_trend")
-        if isinstance(trend_value, bool):
-            return trend_value
-        try:
-            return int(obj.get("event_count") or 0) > 0
-        except (TypeError, ValueError):
-            return False
+    trend_count = serializers.IntegerField(read_only=True)
+    summary = serializers.CharField(read_only=True, allow_null=True)
 
 
 @extend_schema_view(
@@ -88,19 +80,7 @@ class StoryListSerializer(serializers.Serializer):
 class StoryViewSet(GenericViewSet):
     serializer_class = StorySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
-    lookup_field = "doc_id"
-    queryset = []
-
-    STORY_SORT_MAP = {
-        "created_at": {"field": "created_at", "unmapped_type": "date"},
-        "event_count": {"field": "event_count", "unmapped_type": "long"},
-        "title": {"field": "title.keyword", "unmapped_type": "keyword"},
-    }
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        index_name = getattr(settings, "INDEX_STORY_NAME", "story")
-        self.es_helper = ESHelper(index_name)
+    queryset = Story.objects.none()
 
     def get_serializer_class(self):
         if self.action == "search":
@@ -130,11 +110,112 @@ class StoryViewSet(GenericViewSet):
             return False
         raise ValueError("is_trend must be a boolean (true/false)")
 
+    @staticmethod
+    def _to_image_value(value):
+        if not value:
+            return None
+        try:
+            return value.url
+        except Exception:
+            return str(value)
+
+    def _build_article_statistics(self, related_articles_queryset):
+        now = timezone.now()
+        buckets = {}
+        for idx in range(1, 5):
+            start = now - timedelta(days=idx * 7)
+            end = now - timedelta(days=(idx - 1) * 7)
+            web_count = related_articles_queryset.filter(
+                created_at__gte=start,
+                created_at__lt=end,
+            ).count()
+            buckets[str(idx)] = {"social": 0, "web": web_count}
+        return [buckets]
+
+    def _build_story_payload(self, story):
+        related_events = Event.objects.filter(event_stories__story=story).distinct()
+        related_articles = Article.objects.filter(event__event_stories__story=story).distinct()
+
+        categories = list(
+            story.story_categories.select_related("category").values_list("category__title", flat=True)
+        )
+
+        publishers_rows = (
+            related_articles.values("news_source_id", "news_source__name")
+            .annotate(published_articles_count=Count("id"))
+            .order_by("-published_articles_count", "news_source__name")
+        )
+        publishers = [
+            {"id": row["news_source_id"], "name": row["news_source__name"]}
+            for row in publishers_rows
+            if row["news_source_id"] and row["news_source__name"]
+        ]
+
+        unique_album = []
+        for image in [
+            self._to_image_value(story.image_url),
+            *related_events.values_list("image_url", flat=True),
+            *related_articles.values_list("image_url", flat=True),
+            *related_articles.values_list("remote_image_url", flat=True),
+        ]:
+            if image and image not in unique_album:
+                unique_album.append(image)
+            if len(unique_album) >= 3:
+                break
+
+        entity_mentions = EntityMention.objects.filter(news_article__in=related_articles).select_related("entity")
+        entities_count = entity_mentions.values("entity_id").distinct().count()
+        person_count = entity_mentions.filter(entity__entity_type__iexact="person").values("entity_id").distinct().count()
+
+        now = timezone.now()
+        seven_days_ago = now - timedelta(days=7)
+        events_last_7 = related_events.filter(created_at__gte=seven_days_ago)
+        articles_last_7 = related_articles.filter(created_at__gte=seven_days_ago)
+
+        top_event_count = story.event_count if story.event_count is not None else related_events.count()
+        top_article_count = story.article_count if story.article_count is not None else related_articles.count()
+        top_trend_count = related_events.filter(status=1).count()
+        top_conflict_count = related_events.filter(status=2).count()
+
+        payload = {
+            "id": story.id,
+            "title": story.title,
+            "published_at": story.created_at,
+            "last_updated_at": story.updated_at,
+            "categories": categories,
+            "last_seven_days": {
+                "title": story.title,
+                "event_count": events_last_7.count(),
+                "publisher_count": articles_last_7.values("news_source_id").distinct().count(),
+                "article_count": articles_last_7.count(),
+                "trend_count": events_last_7.filter(status=1).count(),
+                "summary": story.short_summary,
+            },
+            "event_count": top_event_count,
+            "publisher_count": len(publishers),
+            "article_count": top_article_count,
+            "trend_count": top_trend_count,
+            "conflict_count": top_conflict_count,
+            "person_count": person_count,
+            "entities_count": entities_count,
+            "save_count": 0,
+            "view_count": 0,
+            "comment_count": 0,
+            "like_count": 0,
+            "summary": story.short_summary,
+            "publishers": publishers,
+            "description": story.description,
+            "album_candidates": unique_album[:3],
+            "article_statistics": self._build_article_statistics(related_articles),
+        }
+        return payload
+
     def retrieve(self, request, story_id=None):
-        story = self.es_helper.get(story_id)
+        story = Story.objects.filter(id=story_id).first()
         if not story:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-        serializer = self.get_serializer(instance=story)
+        payload = self._build_story_payload(story)
+        serializer = self.get_serializer(instance=payload)
         return Response(serializer.data)
 
     @extend_schema(
@@ -176,8 +257,26 @@ class StoryViewSet(GenericViewSet):
         event_id = request.query_params.get("event_id")
         is_trend = request.query_params.get("is_trend")
 
-        filters = {}
-        extra_filter_clauses = []
+        queryset = Story.objects.all().annotate(
+            publisher_count_calc=Count(
+                "story_events__event__articles__news_source",
+                distinct=True,
+            ),
+            trend_count_calc=Count(
+                "story_events__event",
+                filter=Q(story_events__event__status=1),
+                distinct=True,
+            ),
+        )
+
+        if query:
+            queryset = queryset.filter(
+                Q(title__icontains=query)
+                | Q(description__icontains=query)
+                | Q(short_summary__icontains=query)
+                | Q(detailed_summary__icontains=query)
+            )
+
         if event_id not in (None, ""):
             try:
                 event_id_int = int(event_id)
@@ -186,7 +285,7 @@ class StoryViewSet(GenericViewSet):
                     {"detail": "event_id must be an integer"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            filters["event_id"] = event_id_int
+            queryset = queryset.filter(story_events__event_id=event_id_int)
 
         if is_trend not in (None, ""):
             try:
@@ -194,30 +293,41 @@ class StoryViewSet(GenericViewSet):
             except ValueError as exc:
                 return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             if is_trend_bool:
-                extra_filter_clauses.append({"range": {"event_count": {"gt": 0}}})
+                queryset = queryset.filter(event_count__gt=0)
             else:
-                extra_filter_clauses.append({"term": {"event_count": 0}})
+                queryset = queryset.filter(event_count=0)
 
-        raw_hits, total = self.es_helper.search(
-            query=query,
-            page=page,
-            page_size=page_size,
-            sort_field=sort_field,
-            sort_order=sort_order,
-            filters=filters or None,
-            sort_map=self.STORY_SORT_MAP,
-            default_sort_field="created_at",
-            search_fields=["title", "description", "short_summary", "detailed_summary"],
-            extra_filter_clauses=extra_filter_clauses,
-        )
+        queryset = queryset.distinct()
+
+        allowed_sort_fields = {"created_at", "event_count"}
+        if sort_field not in allowed_sort_fields:
+            sort_field = "created_at"
+        if sort_order not in {"asc", "desc"}:
+            sort_order = "desc"
+
+        order_expr = sort_field if sort_order == "asc" else f"-{sort_field}"
+        queryset = queryset.order_by(order_expr, "-id")
+
+        total = queryset.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        stories_page = queryset[start:end]
 
         stories = []
-        for hit in raw_hits:
-            doc = hit.get("_source", {})
-            doc["_id"] = hit.get("_id")
-            if "doc_id" not in doc:
-                doc["doc_id"] = hit.get("_id")
-            stories.append(doc)
+        for story in stories_page:
+            stories.append(
+                {
+                    "id": story.id,
+                    "title": story.title,
+                    "published_at": story.created_at,
+                    "last_updated_at": story.updated_at,
+                    "event_count": story.event_count,
+                    "publisher_count": story.publisher_count_calc or 0,
+                    "article_count": story.article_count,
+                    "trend_count": story.trend_count_calc or 0,
+                    "summary": story.short_summary,
+                }
+            )
 
         serializer = self.get_serializer(stories, many=True)
         return Response({"total": total, "results": serializer.data})
