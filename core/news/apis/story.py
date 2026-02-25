@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
-from core.news.models import Article, EntityMention, Event, Story
+from core.news.models import Article, EntityMention, Event, EventComment, Follow, Story
 
 
 class StoryPublisherSerializer(serializers.Serializer):
@@ -148,7 +148,7 @@ class StoryViewSet(GenericViewSet):
         publishers = [
             {"id": row["news_source_id"], "name": row["news_source__name"]}
             for row in publishers_rows
-            if row["news_source_id"] and row["news_source__name"]
+            if row["news_source_id"] is not None and row["news_source__name"]
         ]
 
         unique_album = []
@@ -176,6 +176,12 @@ class StoryViewSet(GenericViewSet):
         top_article_count = story.article_count if story.article_count is not None else related_articles.count()
         top_trend_count = related_events.filter(status=1).count()
         top_conflict_count = related_events.filter(status=2).count()
+        related_event_ids = list(related_events.values_list("id", flat=True))
+        save_count = Follow.objects.filter(
+            target_type=Follow.TARGET_STORY,
+            target_id=str(story.id),
+        ).count()
+        comment_count = EventComment.objects.filter(event_id__in=[str(item) for item in related_event_ids]).count()
 
         payload = {
             "id": story.id,
@@ -198,9 +204,9 @@ class StoryViewSet(GenericViewSet):
             "conflict_count": top_conflict_count,
             "person_count": person_count,
             "entities_count": entities_count,
-            "save_count": 0,
+            "save_count": save_count,
             "view_count": 0,
-            "comment_count": 0,
+            "comment_count": comment_count,
             "like_count": 0,
             "summary": story.short_summary,
             "publishers": publishers,
